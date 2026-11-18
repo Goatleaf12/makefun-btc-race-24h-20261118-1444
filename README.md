@@ -1,27 +1,35 @@
 # BTC Race Bot — Deep-Dip Mean Reversion
 
-[![make.fun](https://make.fun/badge/btc-race-24h-20261118-1444)](https://make.fun/competitions/btc-race-24h-20261118-1444)
+Bot for make.fun competition `btc-race-24h-20261118-1444` ("Race a BTC
+trading bot live for 24 hours"). It trades Coinbase Wrapped BTC (CBBTC)
+against USDC on 1-minute bars, starting with $1,000 of paper money,
+long only, at most one position at a time.
 
-A bot for the [make.fun](https://make.fun) competition
-`btc-race-24h-20261118-1444`: race a BTC trading bot live for 24 hours.
-It trades Coinbase Wrapped BTC (CBBTC) against USDC on 1-minute bars,
-starting with $1,000 of paper money, long only, one position at a time.
+## How it trades
 
-## Strategy
+One setup only — a deep dip below the recent mean, bought with full cash:
 
-Single-tier deep-dip mean reversion, full cash on entry:
+- **Reference:** the integer mean of the last 60 closes.
+- **Entry:** when the latest close is 130 bps or more below that mean
+  (`close * 10000 <= mean * 9870`), buy with all available cash.
+  No entry before 60 closes exist, and no new entry after bar 1320.
+- **Exit — sell the whole position when any of these fires:**
+  - take profit: close 180 bps above the buy's fill price;
+  - stop loss: close 60 bps below the buy's fill price;
+  - time stop: the position has been held 480 bars or more.
+- **Orders:** `max_slippage_bps = 100` on every order.
 
-- **Entry:** when the latest close falls 130 bps or more below the mean of
-  the last 60 closes, buy with all cash.
-- **Exit (sell everything):** take profit at +180 bps above the fill price,
-  stop loss at −60 bps below it, or a hold cap of 480 bars — whichever
-  comes first.
-- **Cutoff:** no new entries after bar 1320, so no trade is forced to close
-  in the final minutes of the window.
+The entry price is the fill price the replay reports for the buy, and
+the entry bar is the batch that reports that fill. All arithmetic is
+integer (no floats); the bot is a pure function of the bars and fills it
+has already seen — no clock, no network, no files, no randomness — so
+two runs on the same data produce identical orders.
 
-All arithmetic is integer (micro-USDC and 1e-8 BTC units, no floats), and
-the bot is a pure function of the bars and fills it has already seen: no
-clock, no network, no files, no randomness.
+## Files
+
+- `main.py` — the bot (entrypoint).
+- `vendor/makefun_bars.py` — the kit's protocol shim, copied byte-for-byte.
+- `.makefun/owner.json` — owner wallet for the submission.
 
 ## Run locally
 
@@ -29,13 +37,6 @@ clock, no network, no files, no randomness.
 python3 main.py
 ```
 
-The bot speaks `agent-fun/bars-replay/v1` on stdin/stdout (NDJSON: a
+The bot speaks `agent-fun/bars-replay/v1` over stdin/stdout (NDJSON: a
 `hello` line, then one `batch` per minute, one `reply` per batch). The
-vendored `vendor/makefun_bars.py` shim owns the wire protocol; `main.py`
-only decides orders.
-
-## Files
-
-- `main.py` — the bot
-- `vendor/makefun_bars.py` — the kit's protocol shim, copied byte-for-byte
-- `.makefun/owner.json` — owner wallet for the submission
+vendored shim owns the wire; `main.py` only decides the orders.
